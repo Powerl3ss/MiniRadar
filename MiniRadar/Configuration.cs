@@ -54,6 +54,7 @@ public class Configuration : IPluginConfiguration
 
     /// <summary>Distance maximale en yalms (0 = tous les joueurs que le jeu connaît).</summary>
     public int MaxDistance { get; set; } = 0;
+    public MinimapShape MapShape { get; set; } = MinimapShape.Circle;
     public EdgeBehavior Edge { get; set; } = EdgeBehavior.KeepOnEdge;
     public float EdgeOpacity { get; set; } = 0.55f;
 
@@ -65,6 +66,9 @@ public class Configuration : IPluginConfiguration
     public float CalibrationX { get; set; } = 0f;
     public float CalibrationY { get; set; } = 0f;
     public float EdgeRadius { get; set; } = MinimapProjection.DefaultEdgeRadius;
+
+    /// <summary>Moitié du côté d'une minimap carrée (0 = taille lue dans le jeu).</summary>
+    public float SquareHalfSize { get; set; } = 0f;
 
     // --- Fenêtre de réglages ---
     public Vector4 AccentColor { get; set; } = new(0.30f, 0.65f, 1.00f, 1.00f);

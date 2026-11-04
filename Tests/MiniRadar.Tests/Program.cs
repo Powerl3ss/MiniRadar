@@ -22,6 +22,13 @@ var tests = new (string Name, Action Run)[]
     ("Hors de la carte : position réelle sinon", Tests.NoClampKeepsPosition),
     ("Sur la carte : pas marqué hors bord", Tests.InsideIsNotBeyond),
     ("Soi-même : au centre, sans erreur", Tests.SelfIsAtCenter),
+    ("Carte carrée : un coin reste sur la carte", Tests.SquareKeepsCorner),
+    ("Carte carrée : hors carte, ramené sur le côté", Tests.SquareClampsToSide),
+    ("Carte carrée : direction conservée dans un coin", Tests.SquareClampKeepsDirection),
+    ("Carte carrée : rotation appliquée avant le bord", Tests.SquareClampsAfterRotation),
+    ("Carte ronde : le même coin est hors carte", Tests.CircleRejectsCorner),
+    ("Survol : coin d'une carte carrée", Tests.HoverInsideSquareCorner),
+    ("Survol : marge autour de la carte", Tests.HoverMargin),
     ("Distance au sol", Tests.GroundDistance),
     ("Catégorie : l'ami passe avant la compagnie", Tests.FriendWins),
     ("Catégorie : la compagnie passe avant le groupe", Tests.CompanyBeatsParty),
@@ -144,6 +151,50 @@ internal static class Tests
         var point = MinimapProjection.Project(Map(1f), new Vector3(7, 8, 9), new Vector3(7, 8, 9), true);
         Near(point.Position, Center);
         Check(!point.BeyondEdge);
+    }
+
+    private static MinimapGeometry Square(float rotation = 0f) => new(Center, 1f, rotation, 70f, MinimapShape.Square);
+
+    public static void SquareKeepsCorner()
+    {
+        var point = MinimapProjection.Project(Square(), Vector3.Zero, new Vector3(65, 0, 65), true);
+        Check(!point.BeyondEdge);
+        Near(point.Position, Center + new Vector2(65, 65));
+    }
+
+    public static void SquareClampsToSide()
+    {
+        var point = MinimapProjection.Project(Square(), Vector3.Zero, new Vector3(140, 0, 35), true);
+        Check(point.BeyondEdge);
+        Near(point.Position, Center + new Vector2(70, 17.5f));
+    }
+
+    public static void SquareClampKeepsDirection()
+    {
+        var point = MinimapProjection.Project(Square(), Vector3.Zero, new Vector3(200, 0, -200), true);
+        Near(point.Position, Center + new Vector2(70, -70));
+    }
+
+    public static void SquareClampsAfterRotation()
+    {
+        // À 45 degrés, ce point sur l'axe arrive dans le coin : il est sur la carte alors qu'il dépasserait sans rotation.
+        var point = MinimapProjection.Project(Square(MathF.PI / 4f), Vector3.Zero, new Vector3(90, 0, 0), true);
+        Check(!point.BeyondEdge);
+        Near(Vector2.Distance(point.Position, Center), 90f);
+    }
+
+    public static void CircleRejectsCorner() => Check(MinimapProjection.Project(Map(edge: 70f), Vector3.Zero, new Vector3(65, 0, 65), true).BeyondEdge);
+
+    public static void HoverInsideSquareCorner()
+    {
+        Check(MinimapProjection.IsInside(Square(), Center + new Vector2(69, 69)));
+        Check(!MinimapProjection.IsInside(Map(edge: 70f), Center + new Vector2(69, 69)));
+    }
+
+    public static void HoverMargin()
+    {
+        Check(!MinimapProjection.IsInside(Square(), Center + new Vector2(75, 0)));
+        Check(MinimapProjection.IsInside(Square(), Center + new Vector2(75, 0), 10f));
     }
 
     public static void GroundDistance() => Near(MinimapProjection.GroundDistance(new Vector3(0, 100, 0), new Vector3(3, -50, 4)), 5f);

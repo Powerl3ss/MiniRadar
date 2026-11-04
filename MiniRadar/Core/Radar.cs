@@ -73,12 +73,23 @@ public static class PlayerClassifier
     }
 }
 
-/// <summary>Ce qu'il faut savoir de la minimap pour y placer un point. Tout est en pixels d'écran.</summary>
+/// <summary>Forme de la partie visible de la minimap : ronde dans le jeu, carrée avec certains plugins.</summary>
+public enum MinimapShape
+{
+    Circle,
+    Square,
+}
+
+/// <summary>
+/// Ce qu'il faut savoir de la minimap pour y placer un point. Tout est en pixels d'écran.
+/// EdgeRadius est le rayon d'une carte ronde, ou la moitié du côté d'une carte carrée.
+/// </summary>
 public readonly record struct MinimapGeometry(
     Vector2 Center,
     float PixelsPerYalm,
     float Rotation,
-    float EdgeRadius);
+    float EdgeRadius,
+    MinimapShape Shape = MinimapShape.Circle);
 
 /// <summary>Position d'un point sur la minimap.</summary>
 public readonly record struct ProjectedPoint(Vector2 Position, bool BeyondEdge);
@@ -93,6 +104,9 @@ public static class MinimapProjection
 
     // Rayon de la partie visible de la carte, sans mise à l'échelle.
     public const float DefaultEdgeRadius = 68.7f;
+
+    // Moitié du côté d'une carte carrée, si la taille de la zone de la carte n'a pas pu être lue.
+    public const float DefaultSquareHalfSize = 72f;
 
     /// <summary>Centre de la carte à l'écran, à partir de la position et de l'échelle de la fenêtre du jeu.</summary>
     public static Vector2 MapCenter(Vector2 addonPosition, float addonScale, Vector2 calibration) =>
@@ -116,13 +130,23 @@ public static class MinimapProjection
             offset = new Vector2(cos * offset.X - sin * offset.Y, sin * offset.X + cos * offset.Y);
         }
 
-        var length = offset.Length();
-        var beyond = length > map.EdgeRadius;
+        var reach = Reach(map.Shape, offset);
+        var beyond = reach > map.EdgeRadius;
+
+        // Le point recule vers le centre : il reste dans la bonne direction, y compris dans les coins d'une carte carrée.
         if (beyond && clampToEdge)
-            offset *= map.EdgeRadius / length;
+            offset *= map.EdgeRadius / reach;
 
         return new ProjectedPoint(map.Center + offset, beyond);
     }
+
+    /// <summary>Ce point de l'écran est-il sur la carte, à la marge près ?</summary>
+    public static bool IsInside(in MinimapGeometry map, Vector2 point, float margin = 0f) =>
+        Reach(map.Shape, point - map.Center) <= map.EdgeRadius + margin;
+
+    /// <summary>Taille effective du bord, à comparer à EdgeRadius : la distance pour un rond, le plus grand écart pour un carré.</summary>
+    private static float Reach(MinimapShape shape, Vector2 offset) =>
+        shape == MinimapShape.Square ? MathF.Max(MathF.Abs(offset.X), MathF.Abs(offset.Y)) : offset.Length();
 
     /// <summary>Distance au sol, en yalms.</summary>
     public static float GroundDistance(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();

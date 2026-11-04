@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
@@ -15,7 +16,8 @@ public readonly record struct MinimapState(
     float Rotation,
     bool NorthLocked,
     float ZoneScale,
-    uint MapId);
+    uint MapId,
+    float AreaHalfSize);
 
 /// <summary>
 /// Lit la fenêtre de la minimap du jeu (_NaviMap). Les pointeurs ne sont jamais gardés d'une image
@@ -46,7 +48,21 @@ public sealed unsafe class MinimapReader
         ReadZone();
 
         var available = addon->IsVisible && addon->VisibilityFlags == 0 && addon->Scale > 0f;
-        return new MinimapState(available, new Vector2(addon->X, addon->Y), addon->Scale, zoom, rotation, northLocked, zoneScale, mapId);
+        return new MinimapState(available, new Vector2(addon->X, addon->Y), addon->Scale, zoom, rotation, northLocked, zoneScale, mapId, ReadAreaHalfSize(addon));
+    }
+
+    /// <summary>
+    /// Moitié de la zone de la carte, avant mise à l'échelle : c'est le carré dans lequel la carte ronde est inscrite,
+    /// et le bord d'une carte rendue carrée. Renvoie 0 si la valeur manque ou n'a pas de sens.
+    /// </summary>
+    private static float ReadAreaHalfSize(AddonNaviMap* addon)
+    {
+        var area = addon->MainCollision;
+        if (area == null)
+            return 0f;
+
+        var half = MathF.Max(area->Width, area->Height) / 2f;
+        return half is >= 30f and <= 150f ? half : 0f;
     }
 
     private void ReadZoom(AddonNaviMap* addon)

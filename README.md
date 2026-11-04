@@ -24,6 +24,7 @@ Affiche sur la minimap de Final Fantasy XIV un petit point pour chaque joueur d�
 
 **La minimap**
 - Les points suivent la rotation, le zoom, l'échelle de la carte et la taille de la minimap dans la disposition de l'interface.
+- Minimap ronde ou carrée, pour ceux qui ont changé sa forme avec un autre plugin.
 - Joueurs hors de la minimap : ramenés sur le bord (plus transparents), ou masqués.
 - Distance maximale réglable.
 - Masquage automatique en combat ou en instance. Désactivé en JcJ, sans réglage.
@@ -54,7 +55,7 @@ Les points sont dessinés par-dessus l'interface du jeu : une fenêtre du jeu ou
 
 ## Si les points sont décalés
 
-Ouvre `/radar config` → **Affichage** → **Calibrage**. Active le repère : la croix doit tomber sur ton personnage et le cercle sur le bord de la carte. Pour vérifier les positions, active la catégorie **Groupe** avec une autre personne : son point doit tomber sur l'icône du jeu.
+Ouvre `/radar config` → **Affichage** → **Calibrage**. Active le repère : la croix doit tomber sur ton personnage et la ligne sur le bord de la carte. Avec une minimap carrée, choisis d'abord **Carrée** dans **Affichage → Minimap et portée** : sa taille est lue dans le jeu, et le curseur **Taille du carré** permet de la corriger. Pour vérifier les positions, active la catégorie **Groupe** avec une autre personne : son point doit tomber sur l'icône du jeu.
 
 ## Crédits
 

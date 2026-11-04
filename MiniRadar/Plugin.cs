@@ -195,7 +195,18 @@ public sealed class Plugin : IDalamudPlugin
             MinimapProjection.MapCenter(viewportPos + map.Position, map.Scale, calibration),
             MinimapProjection.PixelsPerYalm(map.ZoneScale, map.Scale, map.Zoom),
             map.NorthLocked ? 0f : map.Rotation,
-            Configuration.EdgeRadius * map.Scale);
+            EdgeSize(map) * map.Scale,
+            Configuration.MapShape);
+    }
+
+    /// <summary>Le bord de la carte avant mise à l'échelle, selon sa forme.</summary>
+    public float EdgeSize(in MinimapState map)
+    {
+        if (Configuration.MapShape == MinimapShape.Circle)
+            return Configuration.EdgeRadius;
+        if (Configuration.SquareHalfSize > 0f)
+            return Configuration.SquareHalfSize;
+        return map.AreaHalfSize > 0f ? map.AreaHalfSize : MinimapProjection.DefaultSquareHalfSize;
     }
 
     /// <summary>Nom du monde d'origine d'un joueur.</summary>
@@ -220,7 +231,7 @@ public sealed class Plugin : IDalamudPlugin
     public string DiagnosticLine() =>
         $"Minimap : {(Minimap.Available ? "visible" : "indisponible")}  |  position {Minimap.Position.X:0},{Minimap.Position.Y:0}  |  " +
         $"échelle {Minimap.Scale:0.00}  |  zoom {Minimap.Zoom:0.00}  |  rotation {Minimap.Rotation:0.00}{(Minimap.NorthLocked ? " (nord fixe)" : string.Empty)}  |  " +
-        $"carte {Minimap.MapId}, échelle {Minimap.ZoneScale:0.00}  |  joueurs détectés : {Scanner.TotalDetected}";
+        $"carte {Minimap.MapId}, échelle {Minimap.ZoneScale:0.00}  |  zone {Minimap.AreaHalfSize:0.0}, bord {EdgeSize(Minimap):0.0}  |  joueurs détectés : {Scanner.TotalDetected}";
 
     // ------------------------------------------------------------ Fenêtres
 

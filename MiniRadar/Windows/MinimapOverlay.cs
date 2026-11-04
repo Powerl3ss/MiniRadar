@@ -139,7 +139,10 @@ public sealed class MinimapOverlay
     {
         var color = ImGui.ColorConvertFloat4ToU32(new Vector4(1f, 0.25f, 0.85f, 0.95f));
         var arm = geometry.EdgeRadius * 0.14f;
-        drawList.AddCircle(geometry.Center, geometry.EdgeRadius, color, 96, 1.5f);
+        if (geometry.Shape == MinimapShape.Square)
+            drawList.AddRect(geometry.Center - new Vector2(geometry.EdgeRadius), geometry.Center + new Vector2(geometry.EdgeRadius), color, 0f, ImDrawFlags.None, 1.5f);
+        else
+            drawList.AddCircle(geometry.Center, geometry.EdgeRadius, color, 96, 1.5f);
         drawList.AddLine(geometry.Center - new Vector2(arm, 0), geometry.Center + new Vector2(arm, 0), color, 1.5f);
         drawList.AddLine(geometry.Center - new Vector2(0, arm), geometry.Center + new Vector2(0, arm), color, 1.5f);
     }
@@ -147,7 +150,7 @@ public sealed class MinimapOverlay
     private void DrawTooltip(in MinimapGeometry geometry)
     {
         var mouse = ImGui.GetMousePos();
-        if (Vector2.Distance(mouse, geometry.Center) > geometry.EdgeRadius + 10f || ImGui.GetIO().WantCaptureMouse)
+        if (!MinimapProjection.IsInside(geometry, mouse, 10f) || ImGui.GetIO().WantCaptureMouse)
             return;
 
         hovered.Clear();

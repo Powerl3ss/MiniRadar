@@ -471,9 +471,20 @@ public sealed partial class ConfigWindow : Window, IDisposable
             farthest = Math.Max(farthest, player.Distance);
         var range = Math.Clamp(farthest * 1.1f, 30f, 150f);
 
-        drawList.AddCircleFilled(center, radius, Col(new Vector4(0f, 0f, 0f, 0.25f)), 64);
-        drawList.AddCircle(center, radius, Col(TextDim with { W = 0.45f }), 64, 1.5f * S);
-        drawList.AddCircle(center, radius / 2f, Col(Line), 64);
+        var corner = new Vector2(radius, radius);
+        if (Cfg.MapShape == MinimapShape.Square)
+        {
+            drawList.AddRectFilled(center - corner, center + corner, Col(new Vector4(0f, 0f, 0f, 0.25f)));
+            drawList.AddRect(center - corner, center + corner, Col(TextDim with { W = 0.45f }), 0f, ImDrawFlags.None, 1.5f * S);
+            drawList.AddRect(center - corner / 2f, center + corner / 2f, Col(Line));
+        }
+        else
+        {
+            drawList.AddCircleFilled(center, radius, Col(new Vector4(0f, 0f, 0f, 0.25f)), 64);
+            drawList.AddCircle(center, radius, Col(TextDim with { W = 0.45f }), 64, 1.5f * S);
+            drawList.AddCircle(center, radius / 2f, Col(Line), 64);
+        }
+
         drawList.AddLine(center - new Vector2(radius, 0), center + new Vector2(radius, 0), Col(Line));
         drawList.AddLine(center - new Vector2(0, radius), center + new Vector2(0, radius), Col(Line));
 
@@ -482,7 +493,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
         var legend = $"{range:0} yalms";
         drawList.AddText(new Vector2(center.X + radius - ImGui.CalcTextSize(legend).X, min.Y + size - ImGui.GetTextLineHeight()), Col(TextDim), legend);
 
-        var geometry = new MinimapGeometry(center, radius / range, 0f, radius - 4f * S);
+        var geometry = new MinimapGeometry(center, radius / range, 0f, radius - 4f * S, Cfg.MapShape);
         var self = plugin.Scanner.SelfPosition;
         foreach (var rank in Enumerable.Range(0, PlayerClassifier.CategoryCount))
         {
@@ -646,7 +657,23 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
         Card(() =>
         {
-            CardLabel("Portée");
+            CardLabel("Minimap et portée");
+
+            var shapeWidth = 340f * S;
+            SettingRow("Forme de la minimap", "Carrée si un autre plugin a changé sa forme : les joueurs au loin se placent alors sur le bord du carré.", shapeWidth, () =>
+            {
+                var chosen = Segmented("##mapShape", new[]
+                {
+                    ("Ronde", FontAwesomeIcon.Circle),
+                    ("Carrée", FontAwesomeIcon.Square),
+                }, (int)Cfg.MapShape, shapeWidth);
+                if (chosen != (int)Cfg.MapShape)
+                {
+                    Cfg.MapShape = (MinimapShape)chosen;
+                    changed = true;
+                }
+            }, FrameH + 20f * S);
+
             changed |= SliderIntRow("Distance maximale", Cfg.MaxDistance == 0 ? "Sans limite : tous les joueurs que le jeu connaît autour de toi." : "En yalms. Les joueurs plus loin ne sont pas affichés. 0 = sans limite.", Cfg.MaxDistance, 0, 150, v => Cfg.MaxDistance = v);
 
             var edgeWidth = 340f * S;
@@ -680,15 +707,19 @@ public sealed partial class ConfigWindow : Window, IDisposable
         {
             CardLabel("Calibrage");
             TextDimmed("À toucher seulement si les points sont décalés. Pour vérifier : active la catégorie Groupe avec une autre personne, son point doit tomber sur l'icône du jeu.");
-            ToggleRow("Repère sur la minimap", "Une croix au centre et un cercle sur le bord. S'arrête à la fermeture des réglages.", plugin.CalibrationGuide, v => plugin.CalibrationGuide = v);
+            ToggleRow("Repère sur la minimap", "Une croix au centre et une ligne sur le bord de la carte. S'arrête à la fermeture des réglages.", plugin.CalibrationGuide, v => plugin.CalibrationGuide = v);
             changed |= SliderRow("Décalage horizontal", null, Cfg.CalibrationX, -20f, 20f, "%.1f", v => Cfg.CalibrationX = v);
             changed |= SliderRow("Décalage vertical", null, Cfg.CalibrationY, -20f, 20f, "%.1f", v => Cfg.CalibrationY = v);
-            changed |= SliderRow("Rayon du bord", null, Cfg.EdgeRadius, 40f, 110f, "%.1f", v => Cfg.EdgeRadius = v);
+            if (Cfg.MapShape == MinimapShape.Square)
+                changed |= SliderRow("Taille du carré", Cfg.SquareHalfSize > 0f ? "Moitié du côté. 0 = taille lue dans le jeu." : $"Taille lue dans le jeu : {plugin.EdgeSize(plugin.Minimap):0.0}. Monte le curseur pour la remplacer.", Cfg.SquareHalfSize, 0f, 150f, "%.1f", v => Cfg.SquareHalfSize = v);
+            else
+                changed |= SliderRow("Rayon du bord", null, Cfg.EdgeRadius, 40f, 110f, "%.1f", v => Cfg.EdgeRadius = v);
             if (FancyButton("##resetCalibration", "Valeurs par défaut", FontAwesomeIcon.Undo, ButtonSize("Valeurs par défaut", FontAwesomeIcon.Undo), primary: false))
             {
                 Cfg.CalibrationX = 0f;
                 Cfg.CalibrationY = 0f;
                 Cfg.EdgeRadius = MinimapProjection.DefaultEdgeRadius;
+                Cfg.SquareHalfSize = 0f;
                 changed = true;
             }
         });
@@ -741,6 +772,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
                 Pill(state, map.Available ? Success : Danger, dot: true, centerInFrame: true));
             TextDimmed($"Position : {map.Position.X:0}, {map.Position.Y:0}  |  échelle : {map.Scale:0.00}  |  zoom : {map.Zoom:0.00}");
             TextDimmed($"Rotation : {map.Rotation:0.00}{(map.NorthLocked ? " (nord fixe)" : string.Empty)}  |  carte : {map.MapId}  |  échelle de la carte : {map.ZoneScale:0.00}");
+            TextDimmed($"Forme : {(Cfg.MapShape == MinimapShape.Square ? "carrée" : "ronde")}  |  zone de la carte : {map.AreaHalfSize:0.0}  |  bord utilisé : {plugin.EdgeSize(map):0.0}");
             TextDimmed($"Joueurs détectés : {plugin.Scanner.TotalDetected}  |  affichés : {plugin.DisplayedPlayers.Count}");
         });
 
