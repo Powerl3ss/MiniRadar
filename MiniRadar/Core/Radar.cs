@@ -152,6 +152,23 @@ public static class MinimapProjection
     public static float GroundDistance(Vector3 a, Vector3 b) => new Vector2(a.X - b.X, a.Z - b.Z).Length();
 }
 
+/// <summary>Calculs de la grande carte : pas de rotation, tout se place à partir de l'icône de ton personnage.</summary>
+public static class AreaMapProjection
+{
+    /// <summary>
+    /// Pixels d'écran pour un yalm. La texture d'une carte fait 2048 pixels pour 2048 yalms à l'échelle 100 :
+    /// l'échelle de la zone, le zoom de la grande carte et la taille de sa fenêtre se multiplient.
+    /// </summary>
+    public static float PixelsPerYalm(int sizeFactor, float mapScale, float addonScale) => sizeFactor / 100f * mapScale * addonScale;
+
+    /// <summary>Centre de l'icône du personnage à l'écran : son point de pivot, dans la zone de la carte, dans la fenêtre.</summary>
+    public static Vector2 PinCenter(Vector2 windowPos, float addonScale, Vector2 areaPos, Vector2 pinPos, Vector2 pinOrigin) =>
+        windowPos + (areaPos + pinPos + pinOrigin) * addonScale;
+
+    public static bool IsInside(Vector2 point, Vector2 min, Vector2 max) =>
+        point.X >= min.X && point.Y >= min.Y && point.X <= max.X && point.Y <= max.Y;
+}
+
 /// <summary>Faux joueurs de l'aperçu : un peu partout autour de soi, un par catégorie au moins.</summary>
 public static class PreviewPlayers
 {

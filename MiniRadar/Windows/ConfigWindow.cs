@@ -697,10 +697,18 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
         Card(() =>
         {
+            CardLabel("Grande carte");
+            changed |= ToggleRow("Afficher aussi sur la grande carte", "Quand tu ouvres la carte de la zone où tu te trouves. Rien n'apparaît si elle montre une autre zone.", Cfg.ShowOnAreaMap, v => Cfg.ShowOnAreaMap = v);
+            using (ImRaii.Disabled(!Cfg.ShowOnAreaMap))
+                changed |= SliderRow("Taille des points", "Par rapport à la minimap.", Cfg.AreaMapDotScale, 0.5f, 3f, "%.1f x", v => Cfg.AreaMapDotScale = v);
+        });
+
+        Card(() =>
+        {
             CardLabel("Masquer automatiquement");
             changed |= ToggleRow("En combat", null, Cfg.HideInCombat, v => Cfg.HideInCombat = v);
             changed |= ToggleRow("En instance", "Donjons, raids, défis...", Cfg.HideInDuty, v => Cfg.HideInDuty = v);
-            TextDimmed("Les points disparaissent aussi en JcJ, sans réglage, pendant les cinématiques et quand la minimap est masquée.");
+            TextDimmed("Les points disparaissent aussi en JcJ, sans réglage, pendant les cinématiques et quand la minimap ou la grande carte est masquée.");
         });
 
         Card(() =>
@@ -740,7 +748,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private void DrawAboutPage()
     {
         var version = Plugin.PluginInterface.Manifest.AssemblyVersion.ToString();
-        Hero("À propos", "Les joueurs autour de toi, sur ta minimap.", $"Version {version}", "par Powerl3ss");
+        Hero("À propos", "Les joueurs autour de toi, sur ta minimap et ta grande carte.", $"Version {version}", "par Powerl3ss");
 
         Card(() =>
         {
@@ -773,6 +781,12 @@ public sealed partial class ConfigWindow : Window, IDisposable
             TextDimmed($"Position : {map.Position.X:0}, {map.Position.Y:0}  |  échelle : {map.Scale:0.00}  |  zoom : {map.Zoom:0.00}");
             TextDimmed($"Rotation : {map.Rotation:0.00}{(map.NorthLocked ? " (nord fixe)" : string.Empty)}  |  carte : {map.MapId}  |  échelle de la carte : {map.ZoneScale:0.00}");
             TextDimmed($"Forme : {(Cfg.MapShape == MinimapShape.Square ? "carrée" : "ronde")}  |  zone de la carte : {map.AreaHalfSize:0.0}  |  bord utilisé : {plugin.EdgeSize(map):0.0}");
+            var area = plugin.AreaMap;
+            var areaState = area.Available ? "Visible" : string.IsNullOrEmpty(area.Status) ? "Fermée" : area.Status;
+            Row(() => ImGui.TextUnformatted("Grande carte"), PillWidth(areaState, dot: true), () =>
+                Pill(areaState, area.Available ? Success : TextDim, dot: true, centerInFrame: true));
+            if (area.Available)
+                TextDimmed($"Zoom : {area.MapScale:0.00}  |  {area.PixelsPerYalm:0.00} px par yalm  |  ton icône : {area.Self.X:0}, {area.Self.Y:0}");
             TextDimmed($"Joueurs détectés : {plugin.Scanner.TotalDetected}  |  affichés : {plugin.DisplayedPlayers.Count}");
         });
 

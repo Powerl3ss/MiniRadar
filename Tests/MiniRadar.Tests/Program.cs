@@ -30,6 +30,10 @@ var tests = new (string Name, Action Run)[]
     ("Survol : coin d'une carte carrée", Tests.HoverInsideSquareCorner),
     ("Survol : marge autour de la carte", Tests.HoverMargin),
     ("Distance au sol", Tests.GroundDistance),
+    ("Grande carte : échelle de la zone, zoom et fenêtre", Tests.AreaMapScale),
+    ("Grande carte : centre de ton icône", Tests.AreaMapPinCenter),
+    ("Grande carte : un joueur à 10 yalms à l'est", Tests.AreaMapEast),
+    ("Grande carte : zone visible", Tests.AreaMapInside),
     ("Catégorie : l'ami passe avant la compagnie", Tests.FriendWins),
     ("Catégorie : la compagnie passe avant le groupe", Tests.CompanyBeatsParty),
     ("Catégorie : personne de connu", Tests.StrangerIsOthers),
@@ -195,6 +199,26 @@ internal static class Tests
     {
         Check(!MinimapProjection.IsInside(Square(), Center + new Vector2(75, 0)));
         Check(MinimapProjection.IsInside(Square(), Center + new Vector2(75, 0), 10f));
+    }
+
+    public static void AreaMapScale() => Near(AreaMapProjection.PixelsPerYalm(200, 0.5f, 1.5f), 1.5f);
+
+    public static void AreaMapPinCenter() =>
+        Near(AreaMapProjection.PinCenter(new Vector2(100, 50), 2f, new Vector2(18, 46), new Vector2(300, 200), new Vector2(8, 8)), new Vector2(752, 558));
+
+    public static void AreaMapEast()
+    {
+        // Carte d'échelle 100, zoom 1, fenêtre à 100 % : un yalm vaut un pixel. Pas de bord sur la grande carte.
+        var geometry = new MinimapGeometry(new Vector2(400, 300), AreaMapProjection.PixelsPerYalm(100, 1f, 1f), 0f, float.MaxValue);
+        var point = MinimapProjection.Project(geometry, new Vector3(50, 0, 50), new Vector3(60, 0, 50), false);
+        Near(point.Position, new Vector2(410, 300));
+        Check(!point.BeyondEdge);
+    }
+
+    public static void AreaMapInside()
+    {
+        Check(AreaMapProjection.IsInside(new Vector2(10, 10), Vector2.Zero, new Vector2(10, 10)));
+        Check(!AreaMapProjection.IsInside(new Vector2(11, 5), Vector2.Zero, new Vector2(10, 10)));
     }
 
     public static void GroundDistance() => Near(MinimapProjection.GroundDistance(new Vector3(0, 100, 0), new Vector3(3, -50, 4)), 5f);

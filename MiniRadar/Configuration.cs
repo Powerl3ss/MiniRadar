@@ -58,6 +58,12 @@ public class Configuration : IPluginConfiguration
     public EdgeBehavior Edge { get; set; } = EdgeBehavior.KeepOnEdge;
     public float EdgeOpacity { get; set; } = 0.55f;
 
+    // --- Grande carte ---
+    public bool ShowOnAreaMap { get; set; } = true;
+
+    /// <summary>Taille des points sur la grande carte, par rapport à la minimap.</summary>
+    public float AreaMapDotScale { get; set; } = 1.2f;
+
     // --- Masquage automatique ---
     public bool HideInCombat { get; set; } = false;
     public bool HideInDuty { get; set; } = false;

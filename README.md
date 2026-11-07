@@ -27,6 +27,7 @@ Affiche sur la minimap de Final Fantasy XIV un petit point pour chaque joueur d�
 - Minimap ronde ou carrée, pour ceux qui ont changé sa forme avec un autre plugin.
 - Joueurs hors de la minimap : ramenés sur le bord (plus transparents), ou masqués.
 - Distance maximale réglable.
+- Les points apparaissent aussi sur la grande carte, quand elle montre la zone où tu te trouves, avec une taille réglable. Ils suivent le zoom, le déplacement de la carte et sa transparence.
 - Masquage automatique en combat ou en instance. Désactivé en JcJ, sans réglage.
 - Aperçu avec de faux joueurs, pour régler les couleurs sans personne autour de toi.
 - Repère et décalages de calibrage, si les points ne tombent pas juste.
@@ -41,7 +42,9 @@ Seulement les joueurs que ton jeu a chargés autour de toi, pas toute la zone. L
 
 Le jeu ne donne pas l'identifiant de la compagnie des autres joueurs : un membre de ta compagnie est reconnu par le même sigle et le même monde d'origine. Une autre compagnie de ton monde qui aurait le même sigle serait confondue avec la tienne.
 
-Les points sont dessinés par-dessus l'interface du jeu : une fenêtre du jeu ouverte sur la minimap ne les cache pas.
+Les points sont dessinés par-dessus l'interface du jeu : une fenêtre du jeu ouverte sur la minimap ne les cache pas. Seule exception : les points de la minimap sont masqués là où la grande carte la recouvre.
+
+Sur la grande carte, les joueurs sont placés à partir de l'icône de ton personnage, comme le font d'autres plugins qui dessinent sur cette carte.
 
 ## Commandes
 
@@ -71,6 +74,7 @@ MiniRadar/
 │   └── Radar.cs           logique sans dépendance au jeu (testée à part) : catégories, position sur la minimap
 ├── Radar/
 │   ├── MinimapReader.cs   lit la minimap du jeu : position, échelle, zoom, rotation
+│   ├── AreaMapReader.cs   lit la grande carte : ton icône, le zoom, la zone visible
 │   └── PlayerScanner.cs   parcourt les joueurs et les range par catégorie
 ├── images/                logo
 └── Windows/

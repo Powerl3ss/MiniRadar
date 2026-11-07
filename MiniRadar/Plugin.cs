@@ -39,6 +39,7 @@ public sealed class Plugin : IDalamudPlugin
     public PlayerScanner Scanner { get; }
 
     private readonly MinimapReader minimapReader = new();
+    private readonly AreaMapReader areaMapReader = new();
     private readonly MinimapOverlay overlay;
     private readonly ConfigWindow configWindow;
     private readonly Dictionary<uint, string> worldNames = new();
@@ -51,6 +52,8 @@ public sealed class Plugin : IDalamudPlugin
     public bool CalibrationGuide { get; set; }
 
     public MinimapState Minimap { get; private set; }
+
+    public AreaMapState AreaMap { get; private set; }
 
     /// <summary>Pourquoi les points ne sont pas affichés, ou null s'ils le sont.</summary>
     public string? HiddenReason { get; private set; }
@@ -134,6 +137,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             Scanner.Clear();
             Minimap = default;
+            AreaMap = default;
             HiddenReason = "Écran de chargement";
             return;
         }
@@ -144,12 +148,14 @@ public sealed class Plugin : IDalamudPlugin
         {
             Scanner.Clear();
             Minimap = default;
+            AreaMap = default;
             HiddenReason = "Désactivé en JcJ";
             return;
         }
 
         Scanner.Scan();
         Minimap = minimapReader.Read();
+        AreaMap = Configuration.ShowOnAreaMap ? areaMapReader.Read() : default(AreaMapState) with { Status = "Désactivée dans les réglages" };
 
         if (PreviewMode && Scanner.HasSelf)
         {
@@ -168,7 +174,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (!Scanner.HasSelf)
             return "Personnage non chargé";
-        if (!Minimap.Available)
+        if (!Minimap.Available && !AreaMap.Available)
             return "Minimap masquée";
 
         if (PreviewMode || CalibrationGuide)
@@ -231,7 +237,9 @@ public sealed class Plugin : IDalamudPlugin
     public string DiagnosticLine() =>
         $"Minimap : {(Minimap.Available ? "visible" : "indisponible")}  |  position {Minimap.Position.X:0},{Minimap.Position.Y:0}  |  " +
         $"échelle {Minimap.Scale:0.00}  |  zoom {Minimap.Zoom:0.00}  |  rotation {Minimap.Rotation:0.00}{(Minimap.NorthLocked ? " (nord fixe)" : string.Empty)}  |  " +
-        $"carte {Minimap.MapId}, échelle {Minimap.ZoneScale:0.00}  |  zone {Minimap.AreaHalfSize:0.0}, bord {EdgeSize(Minimap):0.0}  |  joueurs détectés : {Scanner.TotalDetected}";
+        $"carte {Minimap.MapId}, échelle {Minimap.ZoneScale:0.00}  |  zone {Minimap.AreaHalfSize:0.0}, bord {EdgeSize(Minimap):0.0}  |  " +
+        $"grande carte : {(AreaMap.Status is { Length: > 0 } status ? status.ToLowerInvariant() : "fermée")}, zoom {AreaMap.MapScale:0.00}, {AreaMap.PixelsPerYalm:0.00} px/yalm, " +
+        $"toi en {AreaMap.Self.X:0},{AreaMap.Self.Y:0}  |  joueurs détectés : {Scanner.TotalDetected}";
 
     // ------------------------------------------------------------ Fenêtres
 

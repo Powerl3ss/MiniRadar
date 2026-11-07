@@ -5,11 +5,12 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using MiniRadar.Core;
+using MiniRadar.Radar;
 
 namespace MiniRadar.Windows;
 
 /// <summary>
-/// Dessine les points par-dessus la minimap du jeu. Rien n'est ajouté dans la fenêtre du jeu :
+/// Dessine les points par-dessus la minimap et la grande carte du jeu. Rien n'est ajouté dans les fenêtres du jeu :
 /// le dessin se fait sur le fond de l'écran, derrière les fenêtres des plugins, et il ne capte aucun clic.
 /// </summary>
 public sealed class MinimapOverlay
@@ -21,7 +22,7 @@ public sealed class MinimapOverlay
     private readonly List<Dot> dots = new();
     private readonly List<Dot> hovered = new();
 
-    private readonly record struct Dot(RadarPlayer Player, Vector2 Position, float Radius, bool OnEdge);
+    private readonly record struct Dot(RadarPlayer Player, Vector2 Position, float Radius, bool OnEdge, bool OnAreaMap);
 
     public MinimapOverlay(Plugin plugin) => this.plugin = plugin;
 
@@ -32,56 +33,103 @@ public sealed class MinimapOverlay
         if (!plugin.OverlayActive)
             return;
 
-        var map = plugin.Minimap;
-        var viewport = ImGui.GetMainViewport();
-        var geometry = plugin.BuildGeometry(map, viewport.Pos);
+        var viewport = ImGui.GetMainViewport().Pos;
         var drawList = ImGui.GetBackgroundDrawList();
-        var dotScale = Cfg.ScaleWithMinimap ? map.Scale : ImGuiHelpers.GlobalScale;
+        dots.Clear();
 
-        if (plugin.CalibrationGuide)
-            DrawCalibrationGuide(drawList, geometry);
+        var area = plugin.AreaMap;
+        var areaMin = viewport + area.ClipMin;
+        var areaMax = viewport + area.ClipMax;
 
-        CollectDots(geometry, dotScale);
+        var map = plugin.Minimap;
+        var geometry = plugin.BuildGeometry(map, viewport);
+        if (map.Available)
+        {
+            var dotScale = Cfg.ScaleWithMinimap ? map.Scale : ImGuiHelpers.GlobalScale;
+            if (plugin.CalibrationGuide)
+                DrawCalibrationGuide(drawList, geometry);
 
-        // Du moins prioritaire au plus prioritaire : les amis restent au-dessus de la foule.
+            // La grande carte passe au-dessus de la minimap : ses points ne doivent pas apparaître à travers.
+            var count = dots.Count;
+            CollectMinimapDots(geometry, dotScale);
+            if (area.Available)
+                dots.RemoveAll(d => !d.OnAreaMap && AreaMapProjection.IsInside(d.Position, viewport + area.WindowMin, viewport + area.WindowMax));
+            DrawDots(drawList, count, dotScale, 1f);
+        }
+
+        if (area.Available)
+        {
+            var dotScale = (Cfg.ScaleWithMinimap ? area.Scale : ImGuiHelpers.GlobalScale) * Cfg.AreaMapDotScale;
+            var count = dots.Count;
+            CollectAreaMapDots(area, viewport, areaMin, areaMax, dotScale);
+
+            drawList.PushClipRect(areaMin, areaMax, true);
+            DrawDots(drawList, count, dotScale, area.Alpha);
+            drawList.PopClipRect();
+        }
+
+        if (Cfg.ShowTooltips)
+            DrawTooltip(geometry, map.Available, areaMin, areaMax, area.Available);
+    }
+
+    /// <summary>Du moins prioritaire au plus prioritaire : les amis restent au-dessus de la foule.</summary>
+    private void DrawDots(ImDrawListPtr drawList, int from, float dotScale, float alpha)
+    {
         for (var rank = 0; rank < PlayerClassifier.CategoryCount; rank++)
         {
             var category = (RadarCategory)rank;
             var style = Cfg.Style(category);
-            foreach (var dot in dots)
+            for (var i = from; i < dots.Count; i++)
             {
-                if (dot.Player.Category == category)
-                    DrawDot(drawList, dot, style, dotScale);
+                if (dots[i].Player.Category == category)
+                    DrawDot(drawList, dots[i], style, dotScale, alpha);
             }
         }
-
-        if (Cfg.ShowTooltips)
-            DrawTooltip(geometry);
     }
 
-    private void CollectDots(in MinimapGeometry geometry, float dotScale)
+    private void CollectMinimapDots(in MinimapGeometry geometry, float dotScale)
     {
-        dots.Clear();
         var clamp = Cfg.Edge == EdgeBehavior.KeepOnEdge;
-        var maxDistance = Cfg.MaxDistance;
         var self = plugin.Scanner.SelfPosition;
 
         foreach (var player in plugin.DisplayedPlayers)
         {
-            if (maxDistance > 0 && player.Distance > maxDistance)
+            if (TooFar(player))
                 continue;
 
             var point = MinimapProjection.Project(geometry, self, player.Position, clamp);
             if (point.BeyondEdge && !clamp)
                 continue;
 
-            dots.Add(new Dot(player, point.Position, Cfg.Style(player.Category).Size * dotScale, point.BeyondEdge));
+            dots.Add(new Dot(player, point.Position, Cfg.Style(player.Category).Size * dotScale, point.BeyondEdge, false));
         }
     }
 
-    private void DrawDot(ImDrawListPtr drawList, in Dot dot, CategoryStyle style, float dotScale)
+    /// <summary>La grande carte est fixe, nord en haut : chaque joueur est placé à partir de l'icône de ton personnage.</summary>
+    private void CollectAreaMapDots(in AreaMapState area, Vector2 viewport, Vector2 clipMin, Vector2 clipMax, float dotScale)
     {
-        var alpha = style.Color.W * Cfg.Opacity * (dot.OnEdge ? Cfg.EdgeOpacity : 1f);
+        var geometry = new MinimapGeometry(viewport + area.Self, area.PixelsPerYalm, 0f, float.MaxValue);
+        var self = plugin.Scanner.SelfPosition;
+
+        foreach (var player in plugin.DisplayedPlayers)
+        {
+            if (TooFar(player))
+                continue;
+
+            var radius = Cfg.Style(player.Category).Size * dotScale;
+            var point = MinimapProjection.Project(geometry, self, player.Position, clampToEdge: false);
+            if (!AreaMapProjection.IsInside(point.Position, clipMin - new Vector2(radius), clipMax + new Vector2(radius)))
+                continue;
+
+            dots.Add(new Dot(player, point.Position, radius, false, true));
+        }
+    }
+
+    private bool TooFar(in RadarPlayer player) => Cfg.MaxDistance > 0 && player.Distance > Cfg.MaxDistance;
+
+    private void DrawDot(ImDrawListPtr drawList, in Dot dot, CategoryStyle style, float dotScale, float surfaceAlpha)
+    {
+        var alpha = style.Color.W * Cfg.Opacity * surfaceAlpha * (dot.OnEdge ? Cfg.EdgeOpacity : 1f);
         var fill = ImGui.ColorConvertFloat4ToU32(style.Color with { W = alpha });
         var outline = ImGui.ColorConvertFloat4ToU32(new Vector4(0f, 0f, 0f, 0.80f * alpha));
         var thickness = MathF.Max(1f, dotScale);
@@ -147,16 +195,22 @@ public sealed class MinimapOverlay
         drawList.AddLine(geometry.Center - new Vector2(0, arm), geometry.Center + new Vector2(0, arm), color, 1.5f);
     }
 
-    private void DrawTooltip(in MinimapGeometry geometry)
+    private void DrawTooltip(in MinimapGeometry geometry, bool minimap, Vector2 areaMin, Vector2 areaMax, bool areaMap)
     {
         var mouse = ImGui.GetMousePos();
-        if (!MinimapProjection.IsInside(geometry, mouse, 10f) || ImGui.GetIO().WantCaptureMouse)
+        if (ImGui.GetIO().WantCaptureMouse)
+            return;
+
+        // La grande carte passe au-dessus de la minimap : c'est elle qui compte si la souris est sur les deux.
+        var onAreaMap = areaMap && AreaMapProjection.IsInside(mouse, areaMin, areaMax);
+        var onMinimap = !onAreaMap && minimap && MinimapProjection.IsInside(geometry, mouse, 10f);
+        if (!onAreaMap && !onMinimap)
             return;
 
         hovered.Clear();
         foreach (var dot in dots)
         {
-            if (Vector2.Distance(mouse, dot.Position) <= dot.Radius + HoverMargin)
+            if (dot.OnAreaMap == onAreaMap && Vector2.Distance(mouse, dot.Position) <= dot.Radius + HoverMargin)
                 hovered.Add(dot);
         }
 
