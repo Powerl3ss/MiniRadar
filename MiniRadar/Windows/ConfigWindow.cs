@@ -731,6 +731,11 @@ public sealed partial class ConfigWindow : Window, IDisposable
             ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 2f * S);
             Chip($"Version {version}");
             TextDimmed("Le plugin lit seulement ce que ton jeu connaît déjà : il n'envoie rien, et rien n'est enregistré sur les joueurs croisés. Il ne voit que les joueurs chargés autour de toi, pas toute la zone.");
+            ImGui.Dummy(new Vector2(0f, 2f * S));
+            // Les deux lignes des crédits se suivent de près.
+            using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(ImGui.GetStyle().ItemSpacing.X, 2f * S)))
+                ImGui.TextUnformatted("Créé par Powerl3ss.");
+            TextDimmed("Claude, l'IA d'Anthropic, a grandement participé à son développement.");
             ImGui.EndGroup();
         });
 
