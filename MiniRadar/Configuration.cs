@@ -79,6 +79,7 @@ public class Configuration : IPluginConfiguration
     // --- Fenêtre de réglages ---
     public Vector4 AccentColor { get; set; } = new(0.30f, 0.65f, 1.00f, 1.00f);
     public bool AnimatedSettingsBackground { get; set; } = true;
+    public float SettingsOpacity { get; set; } = 0.80f; // fond de la fenêtre des réglages (les panneaux restent pleins)
 
     public CategoryStyle Style(RadarCategory category) => category switch
     {

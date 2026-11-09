@@ -20,12 +20,22 @@ public sealed partial class ConfigWindow : Window, IDisposable
 {
     private enum Page { Home, Players, Display, About }
 
-    private static readonly (Page Page, FontAwesomeIcon Icon, string Label)[] Pages =
+    // La navigation, rangée par thème : chaque groupe a son petit titre dans la barre latérale.
+    private static readonly (string Group, (Page Page, FontAwesomeIcon Icon, string Label)[] Items)[] Navigation =
     {
-        (Page.Home, FontAwesomeIcon.Home, "Accueil"),
-        (Page.Players, FontAwesomeIcon.Users, "Joueurs"),
-        (Page.Display, FontAwesomeIcon.Palette, "Affichage"),
-        (Page.About, FontAwesomeIcon.InfoCircle, "À propos"),
+        ("Radar", new[]
+        {
+            (Page.Home, FontAwesomeIcon.Home, "Accueil"),
+            (Page.Players, FontAwesomeIcon.Users, "Joueurs"),
+        }),
+        ("Réglages", new[]
+        {
+            (Page.Display, FontAwesomeIcon.Palette, "Affichage"),
+        }),
+        ("Plus", new[]
+        {
+            (Page.About, FontAwesomeIcon.InfoCircle, "À propos"),
+        }),
     };
 
     private const string RepoUrl = "https://github.com/Powerl3ss/MiniRadar";
@@ -47,7 +57,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
                ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse)
     {
         this.plugin = plugin;
-        Size = new Vector2(880, 680);
+        Size = new Vector2(1000, 720);
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = ExpandedConstraints;
 
@@ -57,7 +67,8 @@ public sealed partial class ConfigWindow : Window, IDisposable
         // 14 et 18 points (soit 18,67 et 24 pixels) sont des tailles exactes.
         titleFont = atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(14f * 4f / 3f)));
         heroFont = atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(24f)));
-        numberFont = atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(32f)));
+        // 36 points (48 pixels) : les grands chiffres de l'accueil.
+        numberFont = atlas.NewDelegateFontHandle(e => e.OnPreBuild(tk => tk.AddDalamudDefaultFont(36f * 4f / 3f)));
     }
 
     private readonly IFontHandle titleFont;
@@ -68,7 +79,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private const float HeaderHeight = 44f;
     private static readonly WindowSizeConstraints ExpandedConstraints = new()
     {
-        MinimumSize = new Vector2(780, 560),
+        MinimumSize = new Vector2(860, 600),
         MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
     };
     private static readonly WindowSizeConstraints CollapsedConstraints = new()
@@ -142,9 +153,9 @@ public sealed partial class ConfigWindow : Window, IDisposable
     public override void PreDraw()
     {
         windowStyle = ImRaii.PushStyle(ImGuiStyleVar.WindowPadding, Vector2.Zero)
-                            .Push(ImGuiStyleVar.WindowRounding, 14f * S)
+                            .Push(ImGuiStyleVar.WindowRounding, 22f * S)
                             .Push(ImGuiStyleVar.WindowBorderSize, 1f);
-        windowColors = ImRaii.PushColor(ImGuiCol.WindowBg, WindowBg)
+        windowColors = ImRaii.PushColor(ImGuiCol.WindowBg, WindowBg with { W = Math.Clamp(Cfg.SettingsOpacity, 0f, 1f) })
                              .Push(ImGuiCol.Border, Line);
 
         // Repli / dépli animé de la fenêtre.
@@ -166,9 +177,9 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        using var style = ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, 7f * S)
-                                .Push(ImGuiStyleVar.GrabRounding, 7f * S)
-                                .Push(ImGuiStyleVar.PopupRounding, 8f * S)
+        using var style = ImRaii.PushStyle(ImGuiStyleVar.FrameRounding, 10f * S)
+                                .Push(ImGuiStyleVar.GrabRounding, 10f * S)
+                                .Push(ImGuiStyleVar.PopupRounding, 10f * S)
                                 .Push(ImGuiStyleVar.ScrollbarRounding, 8f * S)
                                 .Push(ImGuiStyleVar.ScrollbarSize, 10f * S)
                                 .Push(ImGuiStyleVar.FramePadding, new Vector2(10f, 6f) * S)
@@ -189,7 +200,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
                                  .Push(ImGuiCol.CheckMark, Accent)
                                  .Push(ImGuiCol.SliderGrab, Accent)
                                  .Push(ImGuiCol.SliderGrabActive, Vector4.Lerp(Accent, White, 0.2f))
-                                 .Push(ImGuiCol.PopupBg, new Vector4(0.09f, 0.10f, 0.13f, 0.98f))
+                                 .Push(ImGuiCol.PopupBg, new Vector4(0.110f, 0.106f, 0.129f, 0.99f))
                                  .Push(ImGuiCol.ScrollbarBg, Vector4.Zero)
                                  .Push(ImGuiCol.ScrollbarGrab, new Vector4(1f, 1f, 1f, 0.12f))
                                  .Push(ImGuiCol.ScrollbarGrabHovered, new Vector4(1f, 1f, 1f, 0.20f))
@@ -199,160 +210,102 @@ public sealed partial class ConfigWindow : Window, IDisposable
         var size = ImGui.GetWindowSize();
         lastSize = size;
         var origin = ImGui.GetWindowPos();
-        var headerH = HeaderHeight * S;
-        var footerH = 44f * S;
-        var sidebarW = 64f * S;
+        var margin = PanelGap;
+        var sidebarW = 216f * S;
         var drawList = ImGui.GetWindowDrawList();
 
         DrawAnimatedBackground(origin, size);
 
-        // Repliée, ou pas encore assez haute pendant l'animation : seulement l'en-tête.
-        if (collapsed || size.Y < headerH + footerH + 80f * S)
+        // La barre latérale est un panneau à part, posé sur le fond comme les autres.
+        var sidebarMin = origin + new Vector2(margin, margin);
+        var sidebarMax = origin + new Vector2(margin + sidebarW, size.Y - margin);
+        drawList.AddRectFilled(sidebarMin, sidebarMax, Col(CardBg), PanelRounding);
+        drawList.AddRect(sidebarMin, sidebarMax, Col(Line), PanelRounding);
+        DrawSidebar(sidebarMin, sidebarMax);
+
+        // Les pages défilent entre les mêmes marges que la barre latérale : leurs panneaux s'alignent sur elle en haut
+        // et en bas.
+        var pageX = margin + sidebarW;
+        ImGui.SetCursorPos(new Vector2(pageX, margin));
+        var noPadding = ImRaii.PushStyle(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        using (var child = ImRaii.Child("##page", new Vector2(size.X - pageX, size.Y - margin * 2f), false))
         {
-            DrawTitleBar(size, headerH);
-            return;
-        }
-
-        drawList.AddRectFilled(origin + new Vector2(0, headerH), origin + new Vector2(sidebarW, size.Y - footerH), Col(SidebarBg));
-        drawList.AddLine(origin + new Vector2(0, headerH), origin + new Vector2(size.X, headerH), Col(Line));
-        drawList.AddLine(origin + new Vector2(sidebarW, headerH), origin + new Vector2(sidebarW, size.Y - footerH), Col(Line));
-        drawList.AddLine(origin + new Vector2(0, size.Y - footerH), origin + new Vector2(size.X, size.Y - footerH), Col(Line));
-
-        DrawTitleBar(size, headerH);
-        DrawSidebar(headerH, sidebarW);
-
-        ImGui.SetCursorPos(new Vector2(sidebarW + 1, headerH + 1));
-        using (var child = ImRaii.Child("##page", new Vector2(size.X - sidebarW - 1, size.Y - headerH - footerH - 2), false))
-        {
+            noPadding.Dispose();
             if (child.Success)
                 DrawPage();
         }
-
-        DrawFooter(size, footerH);
     }
 
-    private void DrawTitleBar(Vector2 size, float headerH)
+    private void DrawSidebar(Vector2 min, Vector2 max)
     {
-        var pad = 18f * S;
-        var logoSize = 24f * S;
-
-        ImGui.SetCursorPos(new Vector2(pad, (headerH - logoSize) / 2f));
-        DrawLogo(logoSize);
-
-        ImGui.SameLine(0, 12f * S);
-        using (titleFont.Push())
-        {
-            ImGui.SetCursorPosY((headerH - ImGui.GetTextLineHeight()) / 2f);
-            ImGui.TextUnformatted("MiniRadar");
-        }
-        var titleMin = ImGui.GetItemRectMin();
-        var titleMax = ImGui.GetItemRectMax();
-
-        var loggedIn = Plugin.CurrentCharacterId != 0;
-        ImGui.SameLine(0, 12f * S);
-        ImGui.SetCursorPosY((headerH - FrameH) / 2f);
-        if (loggedIn)
-            Pill(plugin.LocalName, Success, dot: true, centerInFrame: true);
-        else
-            Pill("Hors ligne", TextDim, dot: true, centerInFrame: true);
-
-        ImGui.SetWindowFontScale(0.95f); // soleil / lune un peu plus petits que le titre
-
-        // Soleil la journée, lune le soir (heure réelle du PC), à la taille du titre
-        // et centré verticalement sur lui.
-        ImGui.SameLine(0, 10f * S);
-        var dayIcon = IsDaytime ? FontAwesomeIcon.Sun : FontAwesomeIcon.Moon;
-        var box = titleMax.Y - titleMin.Y;
-        var boxMin = new Vector2(ImGui.GetCursorScreenPos().X, (titleMin.Y + titleMax.Y) / 2f - box / 2f);
-        ImGui.SetCursorScreenPos(boxMin);
-        ImGui.Dummy(new Vector2(box, box));
-        if (ImGui.IsItemHovered())
-            Tip.Show(IsDaytime ? "Journée (8h00 - 20h00)" : "Soirée (20h00 - 8h00)");
-        DrawIconCentered(dayIcon, boxMin, boxMin + new Vector2(box, box), IsDaytime ? SunColor : MoonColor);
-        ImGui.SetWindowFontScale(1f);
-
-        var buttonY = (headerH - FrameH) / 2f;
-        ImGui.SetCursorPos(new Vector2(size.X - pad - FrameH, buttonY));
-        if (IconButton("##close", FontAwesomeIcon.Times, "Fermer"))
-            IsOpen = false;
-
-        ImGui.SetCursorPos(new Vector2(size.X - pad - FrameH * 2 - 6f * S, buttonY));
-        if (IconButton("##fold", collapsed ? FontAwesomeIcon.ChevronDown : FontAwesomeIcon.ChevronUp,
-                       collapsed ? "Déplier les réglages (ou double-clic sur l'en-tête)" : "Replier les réglages (ou double-clic sur l'en-tête)"))
-            ToggleWindowCollapsed();
-
-        ImGui.SetCursorPos(new Vector2(size.X - pad - FrameH * 3 - 12f * S, buttonY));
-        if (IconButton("##radar", Cfg.RadarVisible ? FontAwesomeIcon.Eye : FontAwesomeIcon.EyeSlash,
-                       Cfg.RadarVisible ? "Masquer les points sur la minimap" : "Afficher les points sur la minimap"))
-            plugin.ToggleRadar();
-
-        // Double-clic sur l'en-tête (hors boutons) : replie ou déplie la fenêtre.
-        var origin = ImGui.GetWindowPos();
-        var mouse = ImGui.GetMousePos();
-        var inHeader = mouse.X >= origin.X && mouse.X < origin.X + size.X &&
-                       mouse.Y >= origin.Y && mouse.Y < origin.Y + headerH;
-        if (inHeader && ImGui.IsWindowHovered() && !ImGui.IsAnyItemHovered() &&
-            ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
-            ToggleWindowCollapsed();
-    }
-
-    private void DrawSidebar(float headerH, float sidebarW)
-    {
-        var button = 40f * S;
-        var gap = 8f * S;
-        var x = (sidebarW - button) / 2f;
+        var pad = 14f * S;
         var origin = ImGui.GetWindowPos();
         var drawList = ImGui.GetWindowDrawList();
+        var width = max.X - min.X - pad * 2;
+        var x = min.X - origin.X + pad;
+        var y = min.Y - origin.Y + pad + 4f * S;
 
-        // Surlignage de la page active : il glisse jusqu'à la nouvelle page.
-        var activeIndex = Array.FindIndex(Pages, p => p.Page == page);
-        var slide = Animate(ImGui.GetID("##navHighlight"), activeIndex, 18f);
-        var highlightMin = origin + new Vector2(x, headerH + 14f * S + slide * (button + gap));
-        var highlightMax = highlightMin + new Vector2(button, button);
-        drawList.AddRectFilled(highlightMin, highlightMax, Col(AccentSoft), 10f * S);
-        drawList.AddRect(highlightMin, highlightMax, Col(AccentBorder), 10f * S);
-        drawList.AddRectFilled(new Vector2(origin.X, highlightMin.Y + 9f * S), new Vector2(origin.X + 3f * S, highlightMax.Y - 9f * S), Col(Accent), 2f * S);
-
-        for (var i = 0; i < Pages.Length; i++)
+        // Le logo, le nom, et la croix pour fermer.
+        var logoSize = 30f * S;
+        ImGui.SetCursorPos(new Vector2(x, y));
+        DrawLogo(logoSize);
+        using (titleFont.Push())
         {
-            var (target, icon, label) = Pages[i];
-            ImGui.SetCursorPos(new Vector2(x, headerH + 14f * S + i * (button + gap)));
-            var min = ImGui.GetCursorScreenPos();
-            var max = min + new Vector2(button, button);
-            if (ImGui.InvisibleButton($"##nav{i}", new Vector2(button, button)))
+            ImGui.SetCursorPos(new Vector2(x + logoSize + 10f * S, y + MathF.Round((logoSize - ImGui.GetTextLineHeight()) / 2f)));
+            ImGui.TextUnformatted("BetterChat");
+        }
+
+        ImGui.SetCursorPos(new Vector2(x + width - FrameH, y + (logoSize - FrameH) / 2f));
+        if (IconButton("##close", FontAwesomeIcon.Times))
+            IsOpen = false;
+
+        y += logoSize + 22f * S;
+
+        // Les pages, par groupe. Le surlignage de la page active glisse jusqu'à la nouvelle.
+        var itemH = 33f * S;
+        var activeY = y;
+        var positions = new List<(Page Page, FontAwesomeIcon Icon, string Label, float Y)>();
+        foreach (var (group, items) in Navigation)
+        {
+            ImGui.SetCursorPos(new Vector2(x + 8f * S, y));
+            ImGui.TextColored(TextFaint, group.ToUpperInvariant());
+            y += ImGui.GetTextLineHeight() + 4f * S;
+
+            foreach (var (target, icon, label) in items)
+            {
+                positions.Add((target, icon, label, y));
+                if (target == page)
+                    activeY = y;
+                y += itemH + 1f * S;
+            }
+
+            y += 8f * S;
+        }
+
+        var slide = Animate(ImGui.GetID("##navHighlight"), activeY, 18f);
+        var highlightMin = origin + new Vector2(x, slide);
+        drawList.AddRectFilled(highlightMin, highlightMin + new Vector2(width, itemH), Col(InputBg), 11f * S);
+
+        foreach (var (target, icon, label, itemY) in positions)
+        {
+            ImGui.SetCursorPos(new Vector2(x, itemY));
+            var itemMin = ImGui.GetCursorScreenPos();
+            var itemMax = itemMin + new Vector2(width, itemH);
+            if (ImGui.InvisibleButton($"##nav{target}", itemMax - itemMin))
                 page = target;
 
             var hovered = ImGui.IsItemHovered();
             var active = page == target;
             if (!active && hovered)
-                drawList.AddRectFilled(min, max, Col(HoverOverlay), 10f * S);
+                drawList.AddRectFilled(itemMin, itemMax, Col(HoverOverlay), 11f * S);
 
-            DrawIconCentered(icon, min, max, active ? Accent : hovered ? TextMain : TextDim);
-            if (hovered)
-                Tip.Show(label);
+            var iconBox = new Vector2(itemH, itemH);
+            DrawIconCentered(icon, itemMin + new Vector2(4f * S, 0f), itemMin + new Vector2(4f * S, 0f) + iconBox, active ? Accent : hovered ? TextMain : TextDim);
+            // L'icône et les majuscules du texte sont centrées sur le milieu de la ligne, chacune sur son dessin.
+            var textY = MathF.Round(itemMin.Y + itemH / 2f - CapMiddle());
+            drawList.AddText(new Vector2(itemMin.X + itemH + 4f * S, textY), Col(active || hovered ? TextMain : TextDim), label);
         }
-    }
 
-    private void DrawFooter(Vector2 size, float footerH)
-    {
-        var pad = 18f * S;
-        var status = FooterStatus();
-        var statusSize = ImGui.CalcTextSize(status);
-        ImGui.SetCursorPos(new Vector2(size.X - pad - statusSize.X, size.Y - footerH + (footerH - statusSize.Y) / 2f));
-        ImGui.TextColored(TextDim, status);
-    }
-
-    private string FooterStatus()
-    {
-        if (Plugin.CurrentCharacterId == 0)
-            return "Connecte-toi en jeu pour voir les joueurs autour de toi";
-        if (plugin.HiddenReason is { } reason)
-            return reason;
-
-        var total = plugin.Scanner.TotalDetected;
-        return plugin.PreviewMode ? "Aperçu sur la minimap"
-            : total == 0 ? "Personne d'autre autour de toi"
-            : $"{total} joueur{(total > 1 ? "s" : string.Empty)} détecté{(total > 1 ? "s" : string.Empty)}";
     }
 
     private void DrawLogo(float size)
@@ -392,8 +345,9 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     private void DrawPage()
     {
-        var pad = 24f * S;
-        pageWidth = ImGui.GetContentRegionAvail().X - pad * 2;
+        var pad = PanelGap;
+        // La barre de défilement passe dans la marge de droite.
+        pageWidth = ImGui.GetContentRegionAvail().X - pad - ImGui.GetStyle().ScrollbarSize;
         cardInner = pageWidth;
 
         // Transition : la nouvelle page apparaît en fondu en remontant légèrement.
@@ -403,7 +357,7 @@ public sealed partial class ConfigWindow : Window, IDisposable
             ImGui.SetScrollY(0);
         using var fade = ImRaii.PushStyle(ImGuiStyleVar.Alpha, Math.Max(0.02f, appear) * ImGui.GetStyle().Alpha);
 
-        ImGui.SetCursorPos(new Vector2(pad, pad * 0.8f + (1f - appear) * 16f * S));
+        ImGui.SetCursorPos(new Vector2(pad, (1f - appear) * 16f * S));
         ImGui.BeginGroup();
         switch (page)
         {
@@ -412,8 +366,9 @@ public sealed partial class ConfigWindow : Window, IDisposable
             case Page.Display: DrawDisplayPage(); break;
             case Page.About: DrawAboutPage(); break;
         }
+        // La page s'arrête au bas de son dernier élément, sans marge en plus.
+        ImGui.SetCursorScreenPos(new Vector2(ImGui.GetCursorScreenPos().X, ImGui.GetItemRectMax().Y));
         ImGui.EndGroup();
-        ImGui.Dummy(new Vector2(0, pad));
     }
 
     // =================================================================== Accueil
@@ -422,20 +377,42 @@ public sealed partial class ConfigWindow : Window, IDisposable
     {
         var scanner = plugin.Scanner;
         var total = scanner.TotalDetected;
-        Hero(total == 0 ? "Personne autour de toi." : $"{total} joueur{(total > 1 ? "s" : string.Empty)} autour de toi.",
-             plugin.HiddenReason ?? "Les points sont affichés sur ta minimap.");
 
-        CardsRow(
-            () => StatCard(FontAwesomeIcon.UserFriends, "Amis", scanner.Count(RadarCategory.Friend), Cfg.Friends),
-            () => StatCard(FontAwesomeIcon.Home, "Compagnie", scanner.Count(RadarCategory.FreeCompany), Cfg.FreeCompany),
-            () => StatCard(FontAwesomeIcon.Users, "Groupe et alliance", scanner.Count(RadarCategory.Party) + scanner.Count(RadarCategory.Alliance), Cfg.Party),
-            () => StatCard(FontAwesomeIcon.Globe, "Autres joueurs", scanner.Count(RadarCategory.Others), Cfg.Others));
+        CardRow("##stats1", 2, (i, width) =>
+        {
+            if (i == 0)
+                RowCard(width, () => StatCard(FontAwesomeIcon.UserFriends, "Amis", scanner.Count(RadarCategory.Friend), Cfg.Friends));
+            else
+                RowCard(width, () => StatCard(FontAwesomeIcon.Home, "Compagnie", scanner.Count(RadarCategory.FreeCompany), Cfg.FreeCompany));
+        });
+        CardRow("##stats2", 2, (i, width) =>
+        {
+            if (i == 0)
+                RowCard(width, () => StatCard(FontAwesomeIcon.Users, "Groupe et alliance", scanner.Count(RadarCategory.Party) + scanner.Count(RadarCategory.Alliance), Cfg.Party));
+            else
+                RowCard(width, () => StatCard(FontAwesomeIcon.Globe, "Autres joueurs", scanner.Count(RadarCategory.Others), Cfg.Others), glow: true);
+        });
 
-        CardsRow(DrawRadarCard, DrawKnownPlayersCard);
+        CardRow("##homeRadar", 2, (i, width) =>
+        {
+            if (i == 0)
+            {
+                SectionTitle("Autour de toi", FontAwesomeIcon.Crosshairs, total == 0 ? "Personne" : $"{total} joueur{(total > 1 ? "s" : string.Empty)}");
+                RowCard(width, DrawRadarCard);
+            }
+            else
+            {
+                SectionTitle("Tes proches", FontAwesomeIcon.UserFriends);
+                RowCard(width, DrawKnownPlayersCard);
+            }
+        });
 
         var changed = false;
+        SectionTitle("Minimap", FontAwesomeIcon.MapMarkedAlt, Cfg.RadarVisible ? "Points affichés" : "Points masqués");
         Card(() =>
         {
+            if (plugin.HiddenReason is { } reason)
+                TextDimmed(reason);
             changed |= ToggleRow("Afficher les points sur la minimap", "Raccourci : /radar", Cfg.RadarVisible, v => Cfg.RadarVisible = v);
             ToggleRow("Aperçu avec de faux joueurs", "Pour régler les couleurs sans personne autour de toi. S'arrête à la fermeture des réglages.", plugin.PreviewMode, v => plugin.PreviewMode = v);
         });
@@ -444,20 +421,26 @@ public sealed partial class ConfigWindow : Window, IDisposable
             SaveSoon();
     }
 
+    /// <summary>Un grand chiffre : pastille de la couleur de la catégorie et titre, le chiffre, puis son état.</summary>
     private void StatCard(FontAwesomeIcon icon, string title, int count, CategoryStyle style)
     {
-        IconText(icon, style.Enabled ? style.Color with { W = 1f } : TextDim);
-        ImGui.SameLine();
-        ImGui.TextColored(TextDim, title);
+        var start = ImGui.GetCursorPos();
+        var badge = BadgeSize;
+        IconBadge(icon, badge, style.Enabled ? style.Color : TextDim);
+        ImGui.SetCursorPos(new Vector2(start.X + badge + 10f * S, start.Y + MathF.Round((badge - ImGui.GetTextLineHeight()) / 2f)));
+        ImGui.TextUnformatted(title);
+
+        ImGui.SetCursorPos(new Vector2(start.X, start.Y + badge + 14f * S));
         using (numberFont.Push())
             ImGui.TextUnformatted(count.ToString());
-        TextDimmed(style.Enabled ? "Affichés" : "Masqués");
+
+        ImGui.Dummy(new Vector2(0f, 2f * S));
+        TextDimmed(style.Enabled ? "Affichés sur la minimap" : "Masqués");
     }
 
     /// <summary>La même chose que la minimap, en plus grand : le nord en haut, toi au centre.</summary>
     private void DrawRadarCard()
     {
-        CardLabel("Autour de toi");
         var size = cardInner;
         var radius = size / 2f - 2f * S;
         var min = ImGui.GetCursorScreenPos();
@@ -513,7 +496,6 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private void DrawKnownPlayersCard()
     {
         const int maxLines = 14;
-        CardLabel("Tes proches");
 
         var shown = 0;
         var total = 0;
@@ -547,9 +529,12 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     private void DrawPlayersPage()
     {
-        Hero("Joueurs", "Une couleur et une forme par catégorie. Un joueur n'a qu'une catégorie : un ami de ta compagnie reste un ami.");
-
-        Card(() => ToggleRow("Aperçu avec de faux joueurs", "Pour voir tes réglages sur la minimap sans personne autour de toi.", plugin.PreviewMode, v => plugin.PreviewMode = v));
+        SectionTitle("Aperçu", FontAwesomeIcon.Eye);
+        Card(() =>
+        {
+            TextDimmed("Une couleur et une forme par catégorie. Un joueur n'a qu'une catégorie : un ami de ta compagnie reste un ami.");
+            ToggleRow("Aperçu avec de faux joueurs", "Pour voir tes réglages sur la minimap sans personne autour de toi.", plugin.PreviewMode, v => plugin.PreviewMode = v);
+        });
 
         var changed = false;
         changed |= CategoryCard(RadarCategory.Friend, FontAwesomeIcon.UserFriends, "Amis", "Les joueurs de ta liste d'amis.");
@@ -587,23 +572,10 @@ public sealed partial class ConfigWindow : Window, IDisposable
         var changed = false;
         using var id = ImRaii.PushId(title);
 
+        SectionTitle(title, icon, style.Enabled ? "Affichés" : "Masqués", style.Enabled ? style.Color : TextDim);
         Card(() =>
         {
-            Row(() =>
-            {
-                IconText(icon, style.Enabled ? style.Color with { W = 1f } : TextDim);
-                ImGui.SameLine();
-                ImGui.TextUnformatted(title);
-                TextDimmed(description);
-            }, SwitchSize.X, () =>
-            {
-                var enabled = style.Enabled;
-                if (Switch("##enabled", ref enabled))
-                {
-                    style.Enabled = enabled;
-                    changed = true;
-                }
-            });
+            changed |= ToggleRow("Afficher sur la minimap", description, style.Enabled, v => style.Enabled = v);
 
             if (!style.Enabled)
                 return;
@@ -641,23 +613,20 @@ public sealed partial class ConfigWindow : Window, IDisposable
 
     private void DrawDisplayPage()
     {
-        Hero("Affichage", "Comment et quand les points apparaissent sur la minimap.",
-             Cfg.RadarVisible ? "Points affichés" : "Points masqués");
-
         var changed = false;
 
+        SectionTitle("Points", FontAwesomeIcon.DotCircle);
         Card(() =>
         {
-            CardLabel("Points");
             changed |= ToggleRow("Afficher les points sur la minimap", "Raccourci : /radar", Cfg.RadarVisible, v => Cfg.RadarVisible = v);
             changed |= SliderRow("Opacité", null, Cfg.Opacity, 0.1f, 1f, "%.2f", v => Cfg.Opacity = v);
             changed |= ToggleRow("Suivre la taille de la minimap", "Les points grandissent avec la minimap quand tu l'agrandis dans la disposition de l'interface.", Cfg.ScaleWithMinimap, v => Cfg.ScaleWithMinimap = v);
             changed |= ToggleRow("Infobulle au survol", "Le nom et la distance du joueur sous la souris.", Cfg.ShowTooltips, v => Cfg.ShowTooltips = v);
         });
 
+        SectionTitle("Minimap et portée", FontAwesomeIcon.MapMarkedAlt);
         Card(() =>
         {
-            CardLabel("Minimap et portée");
 
             var shapeWidth = 340f * S;
             SettingRow("Forme de la minimap", "Carrée si un autre plugin a changé sa forme : les joueurs au loin se placent alors sur le bord du carré.", shapeWidth, () =>
@@ -695,25 +664,25 @@ public sealed partial class ConfigWindow : Window, IDisposable
                 changed |= SliderRow("Opacité sur le bord", "Pour distinguer les joueurs au loin de ceux qui sont vraiment sur la carte.", Cfg.EdgeOpacity, 0.1f, 1f, "%.2f", v => Cfg.EdgeOpacity = v);
         });
 
+        SectionTitle("Grande carte", FontAwesomeIcon.Map);
         Card(() =>
         {
-            CardLabel("Grande carte");
             changed |= ToggleRow("Afficher aussi sur la grande carte", "Quand tu ouvres la carte de la zone où tu te trouves. Rien n'apparaît si elle montre une autre zone.", Cfg.ShowOnAreaMap, v => Cfg.ShowOnAreaMap = v);
             using (ImRaii.Disabled(!Cfg.ShowOnAreaMap))
                 changed |= SliderRow("Taille des points", "Par rapport à la minimap.", Cfg.AreaMapDotScale, 0.5f, 3f, "%.1f x", v => Cfg.AreaMapDotScale = v);
         });
 
+        SectionTitle("Masquer automatiquement", FontAwesomeIcon.EyeSlash);
         Card(() =>
         {
-            CardLabel("Masquer automatiquement");
             changed |= ToggleRow("En combat", null, Cfg.HideInCombat, v => Cfg.HideInCombat = v);
             changed |= ToggleRow("En instance", "Donjons, raids, défis...", Cfg.HideInDuty, v => Cfg.HideInDuty = v);
             TextDimmed("Les points disparaissent aussi en JcJ, sans réglage, pendant les cinématiques et quand la minimap ou la grande carte est masquée.");
         });
 
+        SectionTitle("Calibrage", FontAwesomeIcon.Crosshairs);
         Card(() =>
         {
-            CardLabel("Calibrage");
             TextDimmed("À toucher seulement si les points sont décalés. Pour vérifier : active la catégorie Groupe avec une autre personne, son point doit tomber sur l'icône du jeu.");
             ToggleRow("Repère sur la minimap", "Une croix au centre et une ligne sur le bord de la carte. S'arrête à la fermeture des réglages.", plugin.CalibrationGuide, v => plugin.CalibrationGuide = v);
             changed |= SliderRow("Décalage horizontal", null, Cfg.CalibrationX, -20f, 20f, "%.1f", v => Cfg.CalibrationX = v);
@@ -732,11 +701,12 @@ public sealed partial class ConfigWindow : Window, IDisposable
             }
         });
 
+        SectionTitle("Fenêtre de réglages", FontAwesomeIcon.Cog);
         Card(() =>
         {
-            CardLabel("Fenêtre de réglages");
             changed |= ColorRow("Couleur d'accent", null, Cfg.AccentColor, v => Cfg.AccentColor = v);
             changed |= ToggleRow("Fond animé", "Halos lumineux et particules derrière les réglages.", Cfg.AnimatedSettingsBackground, v => Cfg.AnimatedSettingsBackground = v);
+            changed |= SliderRow("Opacité du fond", "Derrière les panneaux. 0 : le jeu se voit entièrement.", Cfg.SettingsOpacity, 0f, 1f, "%.2f", v => Cfg.SettingsOpacity = v);
         });
 
         if (changed)
@@ -748,8 +718,6 @@ public sealed partial class ConfigWindow : Window, IDisposable
     private void DrawAboutPage()
     {
         var version = Plugin.PluginInterface.Manifest.AssemblyVersion.ToString();
-        Hero("À propos", "Les joueurs autour de toi, sur ta minimap et ta grande carte.", $"Version {version}", "par Powerl3ss");
-
         Card(() =>
         {
             var start = ImGui.GetCursorPos();
@@ -759,21 +727,24 @@ public sealed partial class ConfigWindow : Window, IDisposable
             ImGui.SetCursorPosY(start.Y + 6f * S);
             using (heroFont.Push())
                 ImGui.TextUnformatted("MiniRadar");
+            ImGui.SameLine(0, 10f * S);
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 2f * S);
+            Chip($"Version {version}");
             TextDimmed("Le plugin lit seulement ce que ton jeu connaît déjà : il n'envoie rien, et rien n'est enregistré sur les joueurs croisés. Il ne voit que les joueurs chargés autour de toi, pas toute la zone.");
             ImGui.EndGroup();
         });
 
+        SectionTitle("Commandes", FontAwesomeIcon.Terminal);
         Card(() =>
         {
-            CardLabel("Commandes");
             CommandRow("/radar", "Affiche ou masque les points sur la minimap");
             CommandRow("/radar config", "Ouvre ces réglages");
             CommandRow("/radar debug", "Affiche l'état de la minimap dans le chat");
         });
 
+        SectionTitle("Diagnostic", FontAwesomeIcon.Stethoscope);
         Card(() =>
         {
-            CardLabel("Diagnostic");
             var map = plugin.Minimap;
             var state = map.Available ? "Visible" : "Indisponible";
             Row(() => ImGui.TextUnformatted("Minimap du jeu"), PillWidth(state, dot: true), () =>
@@ -794,14 +765,14 @@ public sealed partial class ConfigWindow : Window, IDisposable
             Util.OpenLink(RepoUrl);
     }
 
+    /// <summary>Une commande et ce qu'elle fait, sur une ligne simple : les commandes se suivent de près.</summary>
     private void CommandRow(string command, string description)
     {
-        Row(() =>
+        using (ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, new Vector2(16f * S, 4f * S)))
         {
-            using (ImRaii.PushColor(ImGuiCol.Text, Accent))
-                ImGui.TextUnformatted(command);
-            ImGui.SameLine(0, 16f * S);
+            ImGui.TextColored(Accent, command);
+            ImGui.SameLine();
             ImGui.TextColored(TextDim, description);
-        }, 0f, null);
+        }
     }
 }
